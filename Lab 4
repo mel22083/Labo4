@@ -1,0 +1,209 @@
+/*
+ * Nombrelabo4.c
+ *
+ * Created: 
+ * Author: Willi
+ * Description: 
+ */
+/****************************************/
+// Encabezado (Libraries)
+#define F_CPU 16000000UL
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+
+volatile uint8_t valorADC = 0;
+volatile uint8_t contador = 0;
+volatile uint64_t TimerMillis = 0;	
+
+//volatile uint8_t Presionado1 = 0;
+//volatile uint8_t Presionado2 = 0;
+/****************************************/
+// Function prototypes
+void setup();
+void initADC();
+void Timer1_Init();
+void Display(uint8_t Simbolo);		
+/****************************************/
+// Main Function
+
+int main(void)
+{
+	setup();
+	Timer1_Init();
+	initADC();
+	while (1)
+	{
+		PORTB = 0;
+		PORTD = contador;
+		PORTB = (1 << PORTB5);
+		_delay_ms(5);  
+		
+		uint8_t DisplayHigh = valorADC >> 4; //extrae bits 7-4
+		PORTB = 0;
+		Display(DisplayHigh);                //formato de 7 segmentos
+		PORTB = (1 << PORTB0);
+		_delay_ms(1);
+		
+		uint8_t DisplayLow = valorADC & 0x0F;	//extrae bits de 3 a 0
+		PORTB = 0;
+		Display(DisplayLow);
+		PORTB = (1 << PORTB1);
+		_delay_ms(1);
+		
+	}
+}
+
+/****************************************/
+// NON-Interrupt subroutines
+void setup()
+{
+	
+	cli ();
+	 
+	UCSR0B = 0x00;
+	DDRD = 0xFF;
+	 
+	DDRB = 0xFF;                   
+	 
+	DDRC &= ~((1 << PC0) | (1 << PC1));   //botones
+	PORTC |= (1 << PC0) | (1 << PC1);	   //pullups
+	 
+	PCICR |= (1 << PCIE1);				   //Interrupciones de cambio para los pines
+	PCMSK1 |= (1 << PCINT8) | (1 << PCINT9);	//Interrupcion individual para PC0 y PC1
+	 
+	sei();
+
+}
+
+void Timer1_Init(void)
+{
+	
+	TCCR1B |= (1 << WGM12);					
+	OCR1A = 249; 							//250 cuentas por milisegundo (de 0 a 249)
+	TCCR1B |= (1 << CS11) | (1 << CS10);	//prescaler en 64
+	TIMSK1 |= (1 << OCIE1A);				
+}
+
+void Display(uint8_t Simbolo)
+{
+
+	switch(Simbolo)
+	{
+		case 0x0: //número 0
+		PORTD = 0x7D; 
+		break;
+		
+		case 0x1: //número 1
+		PORTD = 0x11;
+		break;
+		
+		case 0x2: //número 2
+		PORTD = 0xBC;
+		break;
+		
+		case 0x3: //número 3
+		PORTD = 0xB5;
+		break;
+		
+		case 0x4: //número 4
+		PORTD = 0xD1;
+		break;
+		
+		case 0x5: //número 5
+		PORTD = 0xE5;
+		break;
+		
+		case 0x6: //número 6
+		PORTD = 0xED;
+		break;
+
+		case 0x7: //número 7
+		PORTD = 0x31;
+		break;
+		
+		case 0x8: //número 8
+		PORTD = 0xFD;
+		break;
+		
+		case 0x9: //número 0
+		PORTD = 0xF1;
+		break;
+		
+		case 0xA:  // Letra A
+		PORTD = 0xF9;
+		break;
+		
+		case 0xB:  // Letra B
+		PORTD = 0xCD;
+		break;
+		
+		case 0xC:  // Letra C
+		PORTD = 0x6C;
+		break;
+		
+		case 0xD:  // Letra D
+		PORTD = 0x9D;
+		break;
+		
+		case 0xE:  // Letra E
+		PORTD = 0xEC;
+		break;
+		
+		case 0xF:  // Letra F
+		PORTD = 0xE8;
+		break;
+		
+		default:
+		PORTD = 0x00;
+		break;
+
+	}
+	
+}
+
+ISR(TIMER1_COMPA_vect)
+{
+	TimerMillis++;			//cada que hay interrupción cada 1ms se incrementa TimerMillis
+}
+
+ISR(PCINT1_vect)
+{
+	
+	if (!(PINC & (1 << PORTC1)))	//comprueba si el boton se presiona
+	{ 
+		if (TimerMillis > 150)  //verifica que ya hayan pasado 150ms 
+		{
+		contador++;  
+		TimerMillis = 0;			//si se cumple suma el contador y regresa a 0
+		}
+	}
+	
+	if (!(PINC & (1 << PORTC0)))	//lo mismo pero resta
+	{ 
+		if (TimerMillis > 150)
+		{
+			contador--; 
+			TimerMillis = 0;
+		}
+	}
+	
+}
+
+
+void initADC()
+{
+	ADMUX = 0;
+	ADMUX |= (1 << REFS0) | (1 << ADLAR)| (1 << MUX2) | (1 << MUX1);
+	
+	ADCSRA = 0;
+	ADCSRA |= (1 << ADPS1) | (1 << ADPS0) | (1 << ADIE) | (1 << ADEN) | (1 << ADSC);
+}
+/****************************************/
+// Interrupt routines
+ISR(ADC_vect)
+{
+	valorADC = ADCH;
+	ADCSRA |= (1 << ADSC);
+}
